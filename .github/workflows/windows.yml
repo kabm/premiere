@@ -9,6 +9,11 @@ on:
     branches: ["**"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a GitHub Release with this tag (e.g. v0.2.0) after all checks pass. Leave empty to only build."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -120,10 +125,12 @@ jobs:
           if-no-files-found: error
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          name: Rushes ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Rushes ${{ inputs.release_tag || github.ref_name }}
           body_path: packaging/RELEASE_NOTES.md
           files: |
             dist/RushesSetup-*.exe
