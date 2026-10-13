@@ -399,7 +399,9 @@ class GraphBuilder:
         if m.get("fade_out"):
             d = p.t(m["fade_out"])
             chain.append(f"afade=t=out:st={fs(max(0, p.duration - d))}:d={fs(d)}")
-        chain += [f"atrim=duration={fs(p.duration)}", "asetpts=PTS-STARTPTS"]
+        # Hand encoders regular 1024-sample frames: loudnorm emits huge frames, and FFmpeg 9's FLAC
+        # encoder then mislabels the short final block's duration (MKV reported twice the length).
+        chain += [f"atrim=duration={fs(p.duration)}", "asetpts=PTS-STARTPTS", "asetnsamples=n=1024:p=0"]
         self.chains.append(f"[{mixed}]" + ",".join(chain) + "[aout]")
 
     # -- assembly -----------------------------------------------------------
