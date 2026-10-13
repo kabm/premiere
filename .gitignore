@@ -5,3 +5,4 @@ dist/
 .rushes_cache/
 renders/
 dist/
+.claude/worktrees/
