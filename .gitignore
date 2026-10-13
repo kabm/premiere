@@ -4,3 +4,4 @@ build/
 dist/
 .rushes_cache/
 renders/
+dist/

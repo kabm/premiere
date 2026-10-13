@@ -1,0 +1,124 @@
+name: Windows build
+
+# Builds the Windows installer (RushesSetup-<version>-x64.exe) and a portable zip on a real
+# Windows machine, after running the full test suite there. Pushing a tag like v0.2.0 also
+# publishes both files on the GitHub Releases page.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read version
+        id: version
+        run: |
+          $v = python -c "import rushes; print(rushes.__version__)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $v"
+
+      - name: Download FFmpeg (full GPL build)
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path build\ffmpeg\bin | Out-Null
+          $ok = $false
+          try {
+            Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z" -OutFile ffmpeg.7z
+            7z x ffmpeg.7z -offmpeg_src -y | Out-Null
+            $ok = $true
+          } catch { Write-Warning "gyan.dev download failed: $_" }
+          if (-not $ok) {
+            Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile ffmpeg.zip
+            Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_src
+          }
+          $src = Get-ChildItem ffmpeg_src -Directory | Select-Object -First 1
+          Copy-Item "$($src.FullName)\bin\ffmpeg.exe", "$($src.FullName)\bin\ffprobe.exe" build\ffmpeg\bin\
+          Get-ChildItem $src.FullName -File | Copy-Item -Destination build\ffmpeg\
+          "FFmpeg is licensed under the GNU GPL v3. Source code: https://ffmpeg.org/download.html" |
+            Out-File -Encoding utf8 build\ffmpeg\SOURCE.txt
+          "$PWD\build\ffmpeg\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Check FFmpeg features
+        run: python packaging\check_ffmpeg.py
+
+      - name: Run the test suite on Windows
+        run: python -m unittest -v
+
+      - name: Build executables (PyInstaller)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pyinstaller==6.*"
+          python packaging\make_icon.py packaging\windows\rushes.ico
+          pyinstaller --noconfirm --clean packaging\rushes.spec --distpath dist --workpath build\pyinstaller
+          Copy-Item -Recurse build\ffmpeg dist\Rushes\ffmpeg
+
+      - name: Smoke-test the frozen programs
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notlike '*build\ffmpeg*' }) -join ';'
+          .\dist\Rushes\rushes.exe --version
+          .\dist\Rushes\rushes.exe presets
+          .\dist\Rushes\ffmpeg\bin\ffmpeg.exe -hide_banner -v error -f lavfi -i testsrc2=s=640x360:r=24:d=2 -f lavfi -i sine=d=2 -c:v prores_ks -c:a pcm_s16le smoke.mov
+          .\dist\Rushes\rushes.exe grade smoke.mov --exposure 0.5 --saturation 120 --preset h264_web -o smoke_out.mp4
+          if (-not (Test-Path smoke_out.mp4)) { throw "frozen CLI render failed" }
+          if (Test-Path rushes\studio\app.py) {
+            $p = Start-Process -FilePath ".\dist\Rushes\Rushes Studio.exe" -ArgumentList "--self-test" -Wait -PassThru
+            if ($p.ExitCode -ne 0) {
+              Get-Content "$env:LOCALAPPDATA\Rushes\rushes.log" -ErrorAction SilentlyContinue
+              throw "Rushes Studio self-test failed ($($p.ExitCode))"
+            }
+          }
+
+      - name: Build installer (Inno Setup)
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" packaging\windows\rushes.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Test silent install and uninstall
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = Get-ChildItem dist\RushesSetup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER', '/DIR=C:\RushesTest', '/TASKS=addtopath' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          C:\RushesTest\rushes.exe --version
+          C:\RushesTest\rushes.exe probe smoke.mov
+          $u = Start-Process C:\RushesTest\unins000.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exit code $($u.ExitCode)" }
+
+      - name: Portable zip
+        run: Compress-Archive -Path dist\Rushes -DestinationPath "dist\Rushes-${{ steps.version.outputs.version }}-win64-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rushes-${{ steps.version.outputs.version }}-windows
+          path: |
+            dist/RushesSetup-*.exe
+            dist/Rushes-*-portable.zip
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/RushesSetup-*.exe
+            dist/Rushes-*-portable.zip
