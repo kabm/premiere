@@ -1,0 +1,121 @@
+{
+  "settings": {
+    "title": "My Edit",
+    "width": 3840,
+    "height": 2160,
+    "fps": "24000/1001",
+    "start_timecode": "01:00:00:00"
+  },
+  "clips": [
+    {
+      "source": "footage/A001_C001.mov",
+      "in": "00:00:02.000",
+      "out": "00:00:08.000",
+      "color": {
+        "input_lut": "luts/SLog3_to_Rec709.cube",
+        "exposure": 0.3,
+        "contrast": 15,
+        "temperature": 5800,
+        "saturation": 110,
+        "lut": "luts/Film_Look.cube",
+        "lut_intensity": 70
+      },
+      "effects": {
+        "denoise": 20,
+        "sharpen": 15
+      },
+      "fade_in": 1.0
+    },
+    {
+      "source": "footage/A001_C002.mov",
+      "in": 1.5,
+      "duration": 5,
+      "speed": 0.5,
+      "interpolation": "frame_blending",
+      "transition": {
+        "type": "cross_dissolve",
+        "duration": 1.0
+      },
+      "color": {
+        "input_lut": "luts/SLog3_to_Rec709.cube",
+        "lut": "luts/Film_Look.cube"
+      },
+      "effects": {
+        "stabilize": 20
+      }
+    },
+    {
+      "source": "footage/A002_C004.mov",
+      "in": 10,
+      "out": 16,
+      "zoom": 115,
+      "position": [
+        0,
+        -40
+      ],
+      "transition": {
+        "type": "dip_to_black",
+        "duration": 0.75
+      },
+      "color": {
+        "input_lut": "luts/SLog3_to_Rec709.cube",
+        "shadow_tint": [
+          0,
+          0.02,
+          0.05
+        ],
+        "highlight_tint": [
+          0.04,
+          0.02,
+          0
+        ]
+      },
+      "audio": {
+        "volume_db": -3
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "source": "graphics/logo.png",
+      "start": 1,
+      "duration": 4,
+      "width": 0.15,
+      "x": "right",
+      "y": "top",
+      "opacity": 0.85,
+      "fade_in": 0.5,
+      "fade_out": 0.5
+    }
+  ],
+  "titles": [
+    {
+      "text": "Chapter One",
+      "start": 1.5,
+      "duration": 3,
+      "position": "lower_third",
+      "box": true
+    }
+  ],
+  "audio": [
+    {
+      "source": "music/score.wav",
+      "start": 0,
+      "volume_db": -6,
+      "fade_in": 2,
+      "fade_out": 3,
+      "duck": true
+    }
+  ],
+  "master": {
+    "loudness": {
+      "target": -14,
+      "true_peak": -1
+    },
+    "fade_out": 1.5
+  },
+  "export": {
+    "preset": "prores_4444xq",
+    "output": "renders/my_edit.mov"
+  }
+}
