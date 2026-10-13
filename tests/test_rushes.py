@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,18 @@ from rushes.util import RushesError, escape_value, parse_time
 from tests.fixtures import make_fixtures
 
 FIX = os.path.join(tempfile.gettempdir(), "rushes_test_fixtures")
+
+
+def audio_details(path):
+    """Stream/packet facts printed when a duration check fails (diagnoses muxer differences)."""
+    streams = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                              "format=duration:stream=codec_type,codec_name,sample_rate,time_base,duration,"
+                              "start_time,nb_frames:stream_tags=DURATION", "-of", "compact", path],
+                             capture_output=True, text=True).stdout
+    packets = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                              "packet=pts_time,duration_time,size", "-of", "compact", path],
+                             capture_output=True, text=True).stdout.splitlines()
+    return streams + "\nfirst audio packets: " + " ".join(packets[:3]) + "\nlast audio packets: " + " ".join(packets[-3:])
 
 
 def frame_mean(path, t=0.5):
@@ -97,10 +110,9 @@ class RenderTests(unittest.TestCase):
         out = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0",
                               "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", path],
                              capture_output=True, text=True).stdout.strip()
-        details = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                                  "format=duration:stream=codec_type,duration,start_time,nb_frames:stream_tags=DURATION",
-                                  "-of", "compact", path], capture_output=True, text=True).stdout
-        self.assertAlmostEqual(int(out.split(",")[0]), round(duration * fps), delta=1, msg=details)
+        details = audio_details(path)
+        frames = int(re.findall(r"\d+", out)[0])
+        self.assertAlmostEqual(frames, round(duration * fps), delta=1, msg=details)
         if info.audio is not None:
             adur = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
                                    "packet=pts_time,duration_time", "-of", "csv=p=0", path],
@@ -151,6 +163,13 @@ class RenderTests(unittest.TestCase):
         summary = r.stderr[r.stderr.rfind("Summary"):]
         integrated = float(summary.split("I:")[1].split("LUFS")[0])
         self.assertAlmostEqual(integrated, -20, delta=1.0)
+
+    def test_audio_only_presets_keep_duration(self):
+        p = self.project(clips=[{"source": self.f["clip_a"], "out": 1}], overlays=[], titles=[], audio=[])
+        for preset in ("flac", "wav_24bit"):
+            with self.subTest(preset=preset):
+                out = render(p, preset, os.path.join(self.out, "aud_" + preset))[0]
+                self.assertAlmostEqual(probe(out).duration, 1.0, delta=0.05, msg=audio_details(out))
 
     def test_lut_changes_colour(self):
         base = dict(overlays=[], titles=[], audio=[], master={})
