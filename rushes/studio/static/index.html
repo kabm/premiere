@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rushes Studio</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="icon.svg" alt="" width="22" height="22"><span>Rushes Studio</span></div>
+  <div class="menu">
+    <button data-action="new" title="New project">New</button>
+    <button data-action="open" title="Open project (Ctrl+O)">Open</button>
+    <button data-action="save" title="Save (Ctrl+S)">Save</button>
+    <button data-action="saveas">Save as</button>
+    <span class="sep"></span>
+    <button data-action="undo" title="Undo (Ctrl+Z)">Undo</button>
+    <button data-action="redo" title="Redo (Ctrl+Y)">Redo</button>
+  </div>
+  <div class="title" id="projectTitle">Untitled</div>
+  <div class="menu right">
+    <button data-action="queue" id="queueBtn">Queue</button>
+    <button class="primary" data-action="export">Export</button>
+  </div>
+</header>
+
+<main class="workspace">
+  <section class="panel media">
+    <div class="panel-head">
+      <span>Media</span>
+      <select id="drives" title="Drive"></select>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="file-list" id="fileList"></div>
+    <div class="media-actions">
+      <button data-action="addV1" title="Add to main track (double-click)">+ Video</button>
+      <button data-action="addV2" title="Add as overlay / picture-in-picture">+ Overlay</button>
+      <button data-action="addA" title="Add as music / audio track">+ Audio</button>
+      <button data-action="addTitle">+ Title</button>
+    </div>
+    <pre class="media-info" id="mediaInfo"></pre>
+  </section>
+
+  <section class="panel monitor">
+    <div class="panel-head">
+      <span>Program</span>
+      <div class="toggles">
+        <label><input type="checkbox" id="compareToggle"> Before / after</label>
+        <label><input type="checkbox" id="scopesToggle"> Scopes</label>
+      </div>
+    </div>
+    <div class="viewer" id="viewer">
+      <img id="frame" alt="">
+      <video id="previewVideo" controls hidden></video>
+      <div class="viewer-empty" id="viewerEmpty">Double-click a clip in the Media panel to start editing.</div>
+      <div class="spinner" id="spinner" hidden></div>
+    </div>
+    <img id="scopes" class="scopes" alt="" hidden>
+    <div class="transport">
+      <button data-action="home" title="Go to start (Home)">⏮</button>
+      <button data-action="back" title="Back one frame (←)">◀︎</button>
+      <span class="tc" id="timecode">00:00:00:00</span>
+      <button data-action="fwd" title="Forward one frame (→)">▶︎</button>
+      <button data-action="end" title="Go to end (End)">⏭</button>
+      <span class="dur" id="duration">/ 00:00:00:00</span>
+      <span class="grow"></span>
+      <button data-action="playPreview" title="Render a fast half-resolution preview and play it">Play preview</button>
+      <button data-action="showFrame" id="showFrameBtn" hidden>Back to frame view</button>
+    </div>
+  </section>
+
+  <section class="panel inspector">
+    <div class="panel-head"><span id="inspectorTitle">Sequence</span></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="inspector-body" id="inspector"></div>
+  </section>
+
+  <section class="panel timeline">
+    <div class="timeline-tools">
+      <button data-action="split" title="Split clip at playhead (S)">Split</button>
+      <button data-action="delete" title="Delete selected (Del)">Delete</button>
+      <button data-action="duplicate" title="Duplicate selected">Duplicate</button>
+      <button data-action="moveLeft" title="Move clip earlier">◀ Move</button>
+      <button data-action="moveRight" title="Move clip later">Move ▶</button>
+      <span class="grow"></span>
+      <span class="status" id="timelineStatus"></span>
+      <label class="zoom">Zoom <input type="range" id="zoom" min="10" max="400" value="60"></label>
+    </div>
+    <div class="tracks-wrap" id="tracksWrap">
+      <div class="track-labels">
+        <div class="ruler-label"></div>
+        <div class="label">V2</div><div class="label">V1</div><div class="label">T</div><div class="label">A2</div>
+      </div>
+      <div class="tracks" id="tracks">
+        <div class="ruler" id="ruler"></div>
+        <div class="track" data-track="overlays" id="trackV2"></div>
+        <div class="track main" data-track="clips" id="trackV1"></div>
+        <div class="track" data-track="titles" id="trackT"></div>
+        <div class="track" data-track="audio" id="trackA"></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<aside class="queue" id="queue" hidden>
+  <div class="panel-head"><span>Render queue</span><span><button data-action="clearQueue">Clear finished</button> <button data-action="queue">✕</button></span></div>
+  <div id="jobs"></div>
+</aside>
+
+<div class="modal" id="exportModal" hidden>
+  <div class="dialog">
+    <h2>Export</h2>
+    <label>Preset <select id="exportPreset"></select></label>
+    <p class="hint" id="presetHint"></p>
+    <label>Output <span class="row"><input type="text" id="exportPath"><button data-action="browseExport">Browse…</button></span></label>
+    <p class="hint">Exports render the full timeline at full quality. The render queue shows progress.</p>
+    <div class="buttons"><button data-action="closeModal">Cancel</button><button class="primary" data-action="startExport">Render</button></div>
+  </div>
+</div>
+
+<div class="modal" id="fileModal" hidden>
+  <div class="dialog wide">
+    <h2 id="fileModalTitle">Open</h2>
+    <div class="crumbs" id="fmCrumbs"></div>
+    <div class="file-list tall" id="fmList"></div>
+    <label id="fmNameRow">File name <input type="text" id="fmName"></label>
+    <div class="buttons"><button data-action="closeModal">Cancel</button><button class="primary" id="fmOk">Choose</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

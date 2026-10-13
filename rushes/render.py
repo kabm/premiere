@@ -70,7 +70,8 @@ def measure_loudness(project):
     return stats
 
 
-def build_command(project, preset_name=None, output=None, draft=False, cache_dir=None, run_analysis=True):
+def build_command(project, preset_name=None, output=None, draft=False, cache_dir=None, run_analysis=True,
+                  draft_format="mp4"):
     preset_name = preset_name or project.export.get("preset") or "prores_422hq"
     preset = get_preset(preset_name)
     out = resolve_output(project, preset, output)
@@ -121,13 +122,21 @@ def build_command(project, preset_name=None, output=None, draft=False, cache_dir
         cmd += ["-map", "[aout]"] + preset["audio"] + ["-ar", str(project.sample_rate)] + [wav]
         outputs = [pattern, wav]
     else:
-        if draft:
+        if draft and draft_format == "webm":
+            # VP9/Opus plays in every browser (the Studio's preview player).
+            vargs = ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1",
+                     "-b:v", "6M", "-pix_fmt", "yuv420p"]
+            aargs = ["-c:a", "libopus", "-b:a", "160k"]
+            out = os.path.splitext(out)[0] + "_draft.webm"
+            tags = []
+        elif draft:
             vargs = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
             aargs = ["-c:a", "aac", "-b:a", "192k"]
             out = os.path.splitext(out)[0] + "_draft.mp4"
         else:
             vargs, aargs = preset["video"], preset["audio"]
-        cmd += ["-map", "[vout]", "-map", "[aout]"] + vargs + rate + tags + aargs + ["-ar", str(project.sample_rate)]
+        ar = "48000" if (draft and draft_format == "webm") else str(project.sample_rate)  # Opus needs 48 kHz
+        cmd += ["-map", "[vout]", "-map", "[aout]"] + vargs + rate + tags + aargs + ["-ar", ar]
         if project.start_timecode and out.endswith((".mov", ".mxf")):
             cmd += ["-timecode", project.start_timecode]
         cmd += meta + extra_out + [out]

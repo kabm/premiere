@@ -8,7 +8,7 @@ import sys
 
 REQUIRED_ENCODERS = ["prores_ks", "dnxhd", "ffv1", "libx264", "libx265", "cfhd", "tiff", "exr", "dpx", "png",
                      "pcm_s24le", "flac", "aac", "mov_text"]
-OPTIONAL_ENCODERS = ["libsvtav1"]
+OPTIONAL_ENCODERS = ["libsvtav1", "libvpx-vp9", "libopus"]
 REQUIRED_FILTERS = ["lut3d", "lut1d", "xfade", "acrossfade", "loudnorm", "drawtext", "colortemperature",
                     "colorbalance", "colorchannelmixer", "curves", "vibrance", "hqdn3d", "unsharp", "zscale",
                     "sidechaincompress", "afftdn", "equalizer", "acompressor", "alimiter", "scdet", "blend",

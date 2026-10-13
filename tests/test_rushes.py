@@ -88,12 +88,27 @@ class RenderTests(unittest.TestCase):
         # 2 + 1.5 (0.75s at half speed) - 0.5 + 1 - 0.25 + 1
         self.assertAlmostEqual(p.duration, 4.75, places=3)
 
-    def check_video(self, path, codec, pix_fmt, duration):
+    def check_video(self, path, codec, pix_fmt, duration, fps=24):
         info = probe(path)
         self.assertEqual(info.video["codec_name"], codec)
         self.assertEqual(info.video["pix_fmt"], pix_fmt)
         self.assertEqual((info.width, info.height), (640, 360))
-        self.assertAlmostEqual(info.duration, duration, delta=0.1)
+        # Count decoded frames: container durations differ between muxers and FFmpeg versions.
+        out = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0",
+                              "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", path],
+                             capture_output=True, text=True).stdout.strip()
+        details = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                                  "format=duration:stream=codec_type,duration,start_time,nb_frames:stream_tags=DURATION",
+                                  "-of", "compact", path], capture_output=True, text=True).stdout
+        self.assertAlmostEqual(int(out.split(",")[0]), round(duration * fps), delta=1, msg=details)
+        if info.audio is not None:
+            adur = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                                   "packet=pts_time,duration_time", "-of", "csv=p=0", path],
+                                  capture_output=True, text=True).stdout.split()
+            last = [float(x) for x in adur[-1].split(",") if x and x != "N/A"] if adur else []
+            if len(last) == 2:
+                self.assertAlmostEqual(sum(last), duration, delta=0.1, msg=details)
+        self.assertAlmostEqual(info.duration, duration, delta=0.1, msg=details)
         return info
 
     def test_full_project_prores_4444xq(self):
