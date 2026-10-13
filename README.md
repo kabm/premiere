@@ -7,6 +7,46 @@ grade it with LUTs and Lumetri-style controls, add titles, overlays, music and t
 export to ProRes 4444 XQ, DNxHR 444, 16-bit lossless, EXR/DPX/TIFF sequences or delivery codecs.
 It is original open-source code. It is not Adobe software and is not affiliated with Adobe.
 
+## Install on Windows
+
+1. Open the repository's **Actions** tab on GitHub, pick the latest green **Windows build** run and
+   download the `Rushes-<version>-windows` artifact. Releases (tags like `v0.2.0`) also appear on
+   the **Releases** page.
+2. Unzip it and run `RushesSetup-<version>-x64.exe`. It doesn't need admin rights: choose
+   "Install for me only", or "all users" if you have admin rights. Tick "Add the rushes
+   command-line tool to PATH" if you want `rushes` in a terminal.
+3. Start **Rushes Studio** from the Start menu. It opens the editor in your browser.
+
+The installer bundles FFmpeg, so there's nothing else to install. There's also a portable zip
+that needs no installation. The build isn't code-signed, so Windows SmartScreen may show
+"Windows protected your PC". Click **More info → Run anyway**. Every installer is built and
+tested on a clean Windows machine by `.github/workflows/windows.yml`: the test suite, the frozen
+programs and a silent install/uninstall.
+
+## Rushes Studio (the editor)
+
+`Rushes Studio.exe`, or `python -m rushes.studio` from source, starts a small local server on
+`127.0.0.1` and opens the editor in your default browser. Nothing leaves your machine. The server
+only answers requests carrying the secret token from its own launch link, so websites can't reach it.
+
+* **Media panel:** browse drives and folders. Double-click a clip to add it to the timeline, a LUT
+  to apply it to the selected clip, or a project to open it. **+ Overlay / + Audio / + Title**
+  add to the other tracks.
+* **Timeline:** V2 overlays, V1 main track, titles and A2 music. Drag clips to reorder or move them,
+  drag edges to trim, **S** splits at the playhead, Delete removes, Ctrl+Z/Ctrl+Y undo and redo.
+* **Inspector:** clip, motion and transitions, Lumetri-style colour (LUTs, basic correction,
+  creative look, colour wheels, curves), effects, audio, sequence and master settings. The
+  **JSON** tab exposes every setting in the project format, including the ones without a
+  dedicated control.
+* **Program monitor:** a graded frame at the playhead, rendered exactly as the export will be.
+  **Before/after** shows a split comparison, and **Scopes** adds a luma waveform, RGB parade and
+  vectorscope. **Play preview** renders a quick half-resolution preview and plays it.
+* **Export:** pick any preset. Renders run in the queue with progress, cancel and **Show in folder**.
+
+The Studio closes by itself about a minute after its last browser tab is closed, unless a render
+is still running. Previews are still frames and fast draft renders, not real-time playback of the
+full-quality timeline.
+
 ## Image quality
 
 * Every clip is decoded and conformed straight into **16-bit 4:4:4**, and grading runs in **16-bit RGB**.
@@ -30,6 +70,7 @@ frame-blending/optical-flow retiming run at 8-bit. Clips that use none of these 
 pip install .          # gives you the `rushes` command
 # or run in place:
 python -m rushes --help
+python -m rushes.studio   # the editor UI
 ```
 
 ## Camera RAW and log footage

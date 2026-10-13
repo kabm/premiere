@@ -13,5 +13,11 @@ license = { text = "MIT" }
 [project.scripts]
 rushes = "rushes.cli:main"
 
-[tool.setuptools]
-packages = ["rushes"]
+[project.gui-scripts]
+rushes-studio = "rushes.studio.app:main"
+
+[tool.setuptools.packages.find]
+include = ["rushes*"]
+
+[tool.setuptools.package-data]
+"rushes.studio" = ["static/*"]
