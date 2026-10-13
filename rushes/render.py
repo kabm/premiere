@@ -6,6 +6,7 @@ import os
 import re
 import sys
 
+from . import delivery
 from .graph import GraphBuilder
 from .presets import get_preset
 from .util import RushesError, escape_value, fmt_seconds, run, run_with_progress
@@ -83,11 +84,13 @@ def build_command(project, preset_name=None, output=None, draft=False, cache_dir
     if loud and run_analysis and (loud is True or loud.get("two_pass", True)):
         stats = measure_loudness(project)
 
-    gb = GraphBuilder(project, preset=preset, stab_files=stab, loudnorm_stats=stats, draft=draft)
+    gb = GraphBuilder(project, preset=preset, stab_files=stab, loudnorm_stats=stats, draft=draft,
+                      cache_dir=cache_dir)
     want_video = not preset["audio_only"]
     inputs, graph = gb.build(video=want_video, audio=True)
 
-    cmd = FFMPEG + inputs
+    extra_in, extra_out, sidecars = delivery.output_extras(project, preset, out, cache_dir, len(gb.inputs))
+    cmd = FFMPEG + inputs + extra_in
     if len(graph) > 30000:
         script = os.path.join(cache_dir, "graph.txt")
         with open(script, "w") as fh:
@@ -127,8 +130,8 @@ def build_command(project, preset_name=None, output=None, draft=False, cache_dir
         cmd += ["-map", "[vout]", "-map", "[aout]"] + vargs + rate + tags + aargs + ["-ar", str(project.sample_rate)]
         if project.start_timecode and out.endswith((".mov", ".mxf")):
             cmd += ["-timecode", project.start_timecode]
-        cmd += meta + [out]
-        outputs = [out]
+        cmd += meta + extra_out + [out]
+        outputs = [out] + list(sidecars)
     return cmd, outputs, preset_name
 
 

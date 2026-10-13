@@ -29,13 +29,13 @@ GENERATORS = {"black", "white", "bars", "testsrc"}
 
 CLIP_KEYS = {"source", "generator", "in", "out", "duration", "speed", "reverse", "interpolation",
              "fit", "crop", "zoom", "position", "rotation", "flip", "color", "effects", "transition",
-             "fade_in", "fade_out", "audio", "label"}
+             "fade_in", "fade_out", "audio", "label", "keyframes", "time_remap", "freeze", "markers"}
 OVERLAY_KEYS = {"source", "generator", "in", "out", "duration", "start", "width", "x", "y", "opacity",
-                "fade_in", "fade_out", "color", "chroma_key", "label"}
+                "fade_in", "fade_out", "color", "chroma_key", "label", "keyframes", "blend_mode", "mask"}
 TITLE_KEYS = {"text", "start", "duration", "size", "color", "font", "x", "y", "position", "box",
               "box_color", "shadow", "fade", "label"}
 AUDIO_KEYS = {"source", "start", "in", "out", "duration", "volume_db", "fade_in", "fade_out",
-              "duck", "loop", "label"}
+              "duck", "loop", "label", "fx"}
 EFFECT_KEYS = {"denoise", "sharpen", "blur", "stabilize"}
 
 
@@ -70,7 +70,13 @@ class Project:
 
         self.export = dict(data.get("export", {}))
         self.master = dict(data.get("master", {}))
-        _check_keys(self.master, {"color", "fade_in", "fade_out", "loudness", "volume_db"}, "master")
+        _check_keys(self.master, {"color", "fade_in", "fade_out", "loudness", "volume_db", "audio_fx"}, "master")
+        self.cache_dir = s.get("cache_dir") or os.path.join(self.base_dir, ".rushes_cache")
+        # Raw sections validated by their feature modules (timeline, captions, delivery).
+        self.adjustment_layers = data.get("adjustment_layers") or []
+        self.captions = data.get("captions")
+        self.markers = data.get("markers") or []
+        self.burn_in = data.get("burn_in")
 
         clips = data.get("clips") or []
         if not clips:
@@ -170,7 +176,7 @@ class Project:
         _check_keys(c.get("effects", {}), EFFECT_KEYS, f"{where}.effects")
         clip["effects"] = dict(c.get("effects", {}))
         audio = dict(c.get("audio", {}))
-        _check_keys(audio, {"volume_db", "mute", "fade_in", "fade_out"}, f"{where}.audio")
+        _check_keys(audio, {"volume_db", "mute", "fade_in", "fade_out", "fx"}, f"{where}.audio")
         clip["audio"] = audio
         if c.get("flip") not in (None, "h", "v", "hv"):
             raise RushesError(f"{where}: flip must be 'h', 'v' or 'hv'")

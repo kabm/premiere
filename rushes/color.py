@@ -7,6 +7,7 @@ RGB (gbrp16le), so no step is quantised to 8 bits.
 import math
 import os
 
+from . import colormgmt, looks
 from .lut import Lut
 from .util import RushesError, escape_value, uid
 
@@ -20,7 +21,7 @@ COLOR_KEYS = {
     "input_lut", "temperature", "tint", "exposure", "contrast", "highlights", "shadows",
     "whites", "blacks", "saturation", "vibrance", "lut", "lut_intensity",
     "shadow_tint", "midtone_tint", "highlight_tint", "curves", "output_lut",
-}
+} | colormgmt.KEYS | looks.KEYS
 
 
 def to_rgb(matrix="bt709"):
@@ -81,17 +82,25 @@ def _resolve(path, base_dir):
     return path if os.path.isabs(path) else os.path.join(base_dir, path)
 
 
-def build_color_chain(cfg, base_dir, matrix="bt709"):
-    """Return a list of filters (RGB domain). Empty list when there is nothing to do."""
+def build_color_chain(cfg, base_dir, matrix="bt709", ctx=None):
+    """Return a list of filters (RGB domain). Empty list when there is nothing to do.
+
+    ctx carries context for analysis-based tools (see colormgmt/looks hook contracts).
+    """
     if not cfg:
         return []
     unknown = set(cfg) - COLOR_KEYS
     if unknown:
         raise RushesError(f"Unknown color settings: {', '.join(sorted(unknown))}")
-    chain = []
+    ctx = dict(ctx or {})
+    ctx.setdefault("base_dir", base_dir)
+    ctx.setdefault("matrix", matrix)
+    chain = list(colormgmt.input_filters(cfg, ctx))
 
     if cfg.get("input_lut"):
         chain.append(Lut(_resolve(cfg["input_lut"], base_dir)).filter())
+
+    chain += looks.early_filters(cfg, ctx)
 
     temp = _num(cfg, "temperature", 6500, 1000, 40000)
     if temp != 6500:
@@ -152,6 +161,8 @@ def build_color_chain(cfg, base_dir, matrix="bt709"):
         if bad:
             raise RushesError(f"Unknown curves keys: {', '.join(sorted(bad))}")
         chain.append("curves=" + ":".join(f"{k}={escape_value(v)}" for k, v in curves.items()))
+
+    chain += looks.late_filters(cfg, ctx)
 
     if cfg.get("output_lut"):
         chain.append(Lut(_resolve(cfg["output_lut"], base_dir)).filter())

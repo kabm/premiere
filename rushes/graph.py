@@ -7,6 +7,7 @@ in 16-bit RGB. Audio is 32-bit float at the project sample rate.
 import os
 import shutil
 
+from . import audiofx, captions, compositing, keyframes, timeline
 from .color import SCALE_FLAGS, WORKING_YUV, build_color_chain, wrap_rgb
 from .util import RushesError, escape_value, fmt_seconds as fs, uid
 
@@ -56,8 +57,9 @@ def atempo_chain(speed):
 
 
 class GraphBuilder:
-    def __init__(self, project, preset=None, stab_files=None, loudnorm_stats=None, draft=False):
+    def __init__(self, project, preset=None, stab_files=None, loudnorm_stats=None, draft=False, cache_dir=None):
         self.p = project
+        self.cache_dir = cache_dir or project.cache_dir
         self.preset = preset or {}
         self.stab_files = stab_files or {}
         self.loudnorm_stats = loudnorm_stats
@@ -65,6 +67,16 @@ class GraphBuilder:
         self.inputs = []        # list of argument lists
         self.chains = []        # filtergraph chains
         self._input_index = {}
+
+    def color_ctx(self, item=None):
+        """Context handed to colour hooks (see colormgmt / looks)."""
+        item = item or {}
+        return {"cache_dir": self.cache_dir, "base_dir": self.p.base_dir, "matrix": self.p.matrix,
+                "source": item.get("source"), "in": item.get("in"), "src_len": item.get("src_len"),
+                "fps": self.p.fps, "width": self.p.width, "height": self.p.height}
+
+    def grade(self, cfg, item=None):
+        return wrap_rgb(build_color_chain(cfg, self.p.base_dir, self.p.matrix, self.color_ctx(item)), self.p.matrix)
 
     # -- inputs -------------------------------------------------------------
 
@@ -112,6 +124,10 @@ class GraphBuilder:
 
     def transform(self, clip):
         """Zoom / position / rotation / flip on a canvas-sized frame."""
+        if clip.get("keyframes"):
+            kf = keyframes.transform_filters(clip, self.p)
+            if kf is not None:
+                return kf
         W, H = self.p.width, self.p.height
         out = []
         zoom = float(clip.get("zoom", 100)) / 100.0
@@ -179,7 +195,7 @@ class GraphBuilder:
         if fx.get("sharpen"):
             amt = min(3.0, float(fx["sharpen"]) / 50.0)
             chain.append(f"unsharp=5:5:{amt:.3f}:5:5:0")
-        graded = wrap_rgb(build_color_chain(clip.get("color"), self.p.base_dir, self.p.matrix), self.p.matrix)
+        graded = self.grade(clip.get("color"), clip)
         if graded:
             chain.append(graded)
         dur = clip["duration"]
@@ -206,7 +222,7 @@ class GraphBuilder:
         else:
             chain.append(f"scale={W}:{self.p.height}:force_original_aspect_ratio=decrease:force_divisible_by=2:{to}")
         chain += ["setsar=1", f"format={WORKING_YUV}"]
-        graded = wrap_rgb(build_color_chain(ov.get("color"), self.p.base_dir, self.p.matrix), self.p.matrix)
+        graded = self.grade(ov.get("color"), ov)
         if graded:
             chain.append(graded)
         key = ov.get("chroma_key")
@@ -228,11 +244,8 @@ class GraphBuilder:
         chain += [f"trim=duration={fs(dur)}", f"setpts=PTS-STARTPTS+{fs(start)}/TB"]
         ol = uid("ov")
         self.chains.append(f"[{idx}:v]" + ",".join(chain) + f"[{ol}]")
-        x = {"center": "(W-w)/2", "left": "W*0.05", "right": "W*0.95-w"}.get(str(ov.get("x", "center")), ov.get("x"))
-        y = {"center": "(H-h)/2", "top": "H*0.05", "bottom": "H*0.95-h"}.get(str(ov.get("y", "center")), ov.get("y"))
         out = uid("v")
-        self.chains.append(f"[{base}][{ol}]overlay=x={escape_value(x)}:y={escape_value(y)}:eof_action=pass:"
-                           f"format=yuv444p10,format={WORKING_YUV}[{out}]")
+        self.chains.append(compositing.composite(base, ol, ov, self.p, out))
         return out
 
     def title_filter(self, t):
@@ -299,6 +312,7 @@ class GraphBuilder:
         if clip.get("reverse"):
             chain.append("areverse")
         chain += atempo_chain(clip["speed"])
+        chain += audiofx.build(a.get("fx"), self.p)
         if a.get("volume_db"):
             chain.append(f"volume={float(a['volume_db'])}dB")
         if a.get("fade_in"):
@@ -321,6 +335,7 @@ class GraphBuilder:
         args += ["-t", fs(length), "-i", tr["source"]]
         idx = self._input(("audio", i), args)
         chain = ["asetpts=PTS-STARTPTS", self.aformat()]
+        chain += audiofx.build(tr.get("fx"), self.p)
         if tr.get("volume_db"):
             chain.append(f"volume={float(tr['volume_db'])}dB")
         if tr.get("fade_in"):
@@ -361,6 +376,7 @@ class GraphBuilder:
                                f"amix=inputs={len(bus)}:duration=first:normalize=0[{mixed}]")
         chain = []
         m = p.master
+        chain += audiofx.build(m.get("audio_fx"), p)
         if m.get("volume_db"):
             chain.append(f"volume={float(m['volume_db'])}dB")
         loud = m.get("loudness")
@@ -427,8 +443,10 @@ class GraphBuilder:
         if video:
             for i, ov in enumerate(p.overlays):
                 v = self.overlay_video(i, ov, v)
+            v = timeline.adjustment_layers(self, v)
             chain = [self.title_filter(t) for t in p.titles]
-            graded = wrap_rgb(build_color_chain(p.master.get("color"), p.base_dir, p.matrix), p.matrix)
+            chain += captions.burn_filters(p)
+            graded = self.grade(p.master.get("color"))
             if graded:
                 chain.append(graded)
             if p.master.get("fade_in"):

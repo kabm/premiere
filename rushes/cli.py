@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 
-from . import __version__
+from . import __version__, audiofx, captions, colormgmt, interchange, looks, timeline
 from .graph import GraphBuilder
 from .lut import Lut
 from .presets import get_preset, list_presets
@@ -323,6 +323,10 @@ def build_parser():
             s.add_argument("--compare", action="store_true", help="side-by-side before/after")
         add_grade_args(s)
         s.set_defaults(func=func)
+
+    # Feature modules contribute their own commands.
+    for module in (colormgmt, looks, audiofx, timeline, captions, interchange):
+        module.register(sub)
     return p
 
 
